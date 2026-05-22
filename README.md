@@ -191,25 +191,7 @@ Upprepa samma mönster för övriga dimensioner (t.ex. `dim_customer`, `dim_date
 
 ### 3. Testa joins i notebook
 
-Verifiera att faktatabell och dimensioner går att joina korrekt innan du skapar marts:
-
-```sql
-%sql
-USE CATALOG supply_chain_live;
-USE SCHEMA gold;
-
-SELECT
-  ol.total_amount,
-  c.first_name,
-  c.last_name,
-  c.country,
-  p.product_name,
-  p.product_price
-FROM fct_orderlines ol
-  LEFT JOIN dim_customer c ON ol.customer_id = c.customer_id
-  LEFT JOIN dim_product p ON ol.product_id = p.product_id
-WHERE c.country = 'Puerto Rico';
-```
+Verifiera att faktatabell och dimensioner går att joina korrekt innan du skapar marts.
 
 ### 4. Marts – filtrerade vyer per målgrupp
 
