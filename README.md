@@ -142,9 +142,9 @@ def cleaned_supply_chain():
 
 ## Gold Layer – Aggregerat & analysklart
 
-> *Kommer att läggas till efter nästa lektion.*
-
 Gold-lagret byggs ovanpå Silver och innehåller aggregerade vyer och tabeller anpassade för specifika analysändamål, t.ex. dashboards eller rapporter.
+
+Dimensionsmodellering i dbdiagram. 
 
 ---
 
