@@ -142,9 +142,94 @@ def cleaned_supply_chain():
 
 ## Gold Layer – Aggregerat & analysklart
 
-Gold-lagret byggs ovanpå Silver och innehåller aggregerade vyer och tabeller anpassade för specifika analysändamål, t.ex. dashboards eller rapporter.
+Gold-lagret byggs ovanpå Silver och innehåller faktatabeller, dimensionstabeller och marts anpassade för analys och dashboards. Strukturen planeras med dimensionsmodellering (t.ex. i dbdiagram) innan tabellerna skapas.
 
-Dimensionsmodellering i dbdiagram. 
+**Ordning:**
+1. Modellera strukturen (faktatabell + dimensionstabeller)
+2. Skapa faktatabell som Streaming Table
+3. Skapa dimensionstabeller som Materialized Views
+4. Testa joins i notebook
+5. Skapa marts för specifika målgrupper/filter
+
+### 1. Faktatabell – Streaming Table
+
+Faktatabellen läser från Silver via streaming och beräknar härledda kolumner (t.ex. `total_amount`) som medvetet utelämnats i Silver-lagret.
+
+```sql
+CREATE OR REFRESH STREAMING TABLE supply_chain_live.gold.fct_orderlines
+  COMMENT "Fact table - gold layer" AS
+SELECT
+  order_item_id,
+  order_id,
+  customer_id,
+  product_card_id AS product_id,
+  date_format(order_date, 'yyyyMMddHHmm')::bigint AS order_datetime_id,
+  ROUND(order_item_product_price, 2) AS order_item_price,
+  order_item_quantity AS quantity,
+  order_item_discount_rate AS discount_rate,
+  ROUND(order_item_price * quantity * (1 - discount_rate), 2) AS total_amount
+FROM STREAM supply_chain_live.silver.supply_chain_obt;
+```
+
+### 2. Dimensionstabeller – Materialized Views
+
+Dimensionstabeller skapas som Materialized Views. Använd `MAX_BY` för att deduplicera och alltid behålla det senaste värdet per nyckel.
+
+```sql
+CREATE OR REFRESH MATERIALIZED VIEW supply_chain_live.gold.dim_product
+  COMMENT "Dim products deduplicated - gold layer" AS
+SELECT
+  product_card_id AS product_id,
+  MAX_BY(product_name, order_date) AS product_name,
+  MAX_BY(product_price, order_date) AS product_price
+FROM supply_chain_live.silver.supply_chain_obt
+GROUP BY product_id
+ORDER BY product_id;
+```
+
+Upprepa samma mönster för övriga dimensioner (t.ex. `dim_customer`, `dim_date`).
+
+### 3. Testa joins i notebook
+
+Verifiera att faktatabell och dimensioner går att joina korrekt innan du skapar marts:
+
+```sql
+%sql
+USE CATALOG supply_chain_live;
+USE SCHEMA gold;
+
+SELECT
+  ol.total_amount,
+  c.first_name,
+  c.last_name,
+  c.country,
+  p.product_name,
+  p.product_price
+FROM fct_orderlines ol
+  LEFT JOIN dim_customer c ON ol.customer_id = c.customer_id
+  LEFT JOIN dim_product p ON ol.product_id = p.product_id
+WHERE c.country = 'Puerto Rico';
+```
+
+### 4. Marts – filtrerade vyer per målgrupp
+
+En mart är en Materialized View som kombinerar faktatabell och dimensioner och filtrerar för ett specifikt användningsfall.
+
+```sql
+CREATE OR REFRESH MATERIALIZED VIEW supply_chain_live.gold.mart_puerto_rico
+  COMMENT "Mart for the Puerto Rico stores - gold layer" AS
+SELECT
+  ol.total_amount,
+  c.first_name,
+  c.last_name,
+  c.country,
+  p.product_name,
+  p.product_price
+FROM fct_orderlines ol
+  LEFT JOIN dim_customer c ON ol.customer_id = c.customer_id
+  LEFT JOIN dim_product p ON ol.product_id = p.product_id
+WHERE c.country = 'Puerto Rico';
+```
 
 ---
 
